@@ -126,7 +126,7 @@ public class Client {
 
     private void run() {
 
-        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(100);
 
         Runnable checkForNewTask = () -> {
             requestToken();
