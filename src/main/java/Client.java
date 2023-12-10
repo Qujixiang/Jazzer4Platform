@@ -314,6 +314,8 @@ public class Client {
             if (process.exitValue() != 0) {
                 task.status = -1;
                 task.errorMsg = "git clone failed";
+            } else {
+                System.out.println("git clone success");
             }
         } catch (Exception e) {
             task.status = -1;
