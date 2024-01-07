@@ -3,6 +3,7 @@ import org.apache.maven.shared.verifier.Verifier;
 import org.json.JSONObject;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
 import java.util.regex.*;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -15,7 +16,6 @@ public class Client {
     private static final long POLL_INTERVAL_SECONDS = 5L;
     String accessKey = "dynamicCheckJava";
     String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-    String token;
 
     String jazzerPath;
     String jazzerJarPath;
@@ -38,55 +38,20 @@ public class Client {
         client.run();
     }
 
-    public void requestToken() {
-        HttpURLConnection connection = null;
-        try {
-            String url = "https://hust-csdf.liuxx.com/sapi/api/checkTask/authenticate";
-            String requestBody = "{\"AccessKey\":\"" + accessKey + "\",\"SecretKey\":\"" + secretKey + "\"}";
-
-            URL apiUrl = new URL(url);
-            connection = (HttpURLConnection) apiUrl.openConnection();
-            connection.setRequestMethod("POST");
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Accept", "text/json");
-            connection.setDoOutput(true);
-
-            OutputStream outputStream = connection.getOutputStream();
-            outputStream.write(requestBody.getBytes());
-            outputStream.flush();
-
-            int responseCode = connection.getResponseCode();
-            BufferedReader reader;
-            if (responseCode == HttpURLConnection.HTTP_OK) {
-                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            } else {
-                reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
-            }
-
-            StringBuilder response = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                response.append(line);
-            }
-            reader.close();
-            JSONObject json = new JSONObject(response.toString());
-            this.token = json.getJSONObject("result").getString("token");
-
-        } catch (IOException e) {
-            System.out.println("Error occurred while requesting tasks: " + e.getMessage());
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-    }
-
     private void setTestResult(Result result, Task task) {
         HttpURLConnection connection = null;
         try {
+            String accessKey = "dynamicCheck";
+            String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
             String url = "https://hust-csdf.liuxx.com/sapi/api/checkTask/retunDynamicCheckResult";
-            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":\"" + task.taskid + "\",\"toolName\":\"" + "Jazzer" + "\"," + "\"result\":[{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}]}";
-//            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":\"" + task.taskid + "\",\"toolName\":\"" + "Jazzer" + "\"," + "\"result\":[{\"img_base64\": \"\", \"filename\":\"JavaTest666.java\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"org.hust.test::main\",\"poc\":\"" + result.poc + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + -1 + "}]}";
+//            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":\"" + task.taskid + "\",\"toolName\":\"" + "Jazzer" + "\"," + "\"result\":[{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}]}";
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("AccessKey", accessKey);
+            requestJson.put("SecretKey", secretKey);
+            requestJson.put("taskid", task.taskid);
+            requestJson.put("toolName", "Jazzer");
+            requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
+            String requestBody = requestJson.toString();
 
             URL apiUrl = new URL(url);
             connection = (HttpURLConnection) apiUrl.openConnection();
@@ -125,20 +90,18 @@ public class Client {
     }
 
     private void run() {
-
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(100);
+        final ExecutorService taskExecutor = Executors.newCachedThreadPool();
 
         Runnable checkForNewTask = () -> {
-            requestToken();
             try {
+                String accessKey = "dynamicCheck";
+                String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
                 String SERVER_URL = "https://hust-csdf.liuxx.com/sapi/api/checkTask/getDynamicCheckTask_Java";
+                String requestBody = "{\"AccessKey\":\"" + accessKey + "\", \"SecretKey\": \"" + secretKey + "\"}";
 
-                // 发送 HTTP 请求到服务器以检查新任务
                 URL apiUrl = new URL(SERVER_URL);
                 HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
-                String requestBody = "{\"token\":\"" + token + "\",\"codetype\":\"" + "\"}";
-
-                connection = (HttpURLConnection) apiUrl.openConnection();
                 connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "application/json");
                 connection.setRequestProperty("Accept", "text/json");
@@ -163,17 +126,14 @@ public class Client {
                     if (msg.equals("OK")) {
                         System.out.println("New task detected: " + taskJson);
                         Task task = new Task(taskJson);
-                        handleNewTask(task);
+                        taskExecutor.submit(() -> {
+                            handleNewTask(task);
+                        });
                     } else {
                         System.out.println("没有新的检测任务");
                     }
                 } else {
                     System.out.println("没有新的检测任务");
-//                    20000	成功
-//                    50002	鉴权失败，Token无效
-//                    10006	token 过期
-//                    10007	Token 已加入黑名单
-//                    20002	没有检测任务
                 }
             } catch (Exception e) {
                 System.err.println("Error while checking for new task: " + e.getMessage());
@@ -192,14 +152,16 @@ public class Client {
     private void setTaskStatus(Task task, int status) {
         HttpURLConnection connection = null;
         try {
-            // token	string	必须		通过/checkTask/authentication获得Token，通过此处回传，服务端用于安全验证
-            // taskid	number	必须		任务ID
-            // status	number	必须		设置检测状态 1开始检测 0检测失败
-            // msg	string	必须		检测异常时，需通过此接口返回异常原因
-
-
+            String accessKey = "dynamicCheck";
+            String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
             String url = "https://hust-csdf.liuxx.com/sapi/api/checkTask/setDynamicCheckStatus";
-            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":" + task.taskid + ",\"status\":" + status + ",\"msg\":\"" + task.errorMsg + "\"}";
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("AccessKey", accessKey);
+            requestJson.put("SecretKey", secretKey);
+            requestJson.put("taskid", task.taskid);
+            requestJson.put("status", status);
+            requestJson.put("msg", task.errorMsg);
+            String requestBody = requestJson.toString();
 
             URL apiUrl = new URL(url);
             connection = (HttpURLConnection) apiUrl.openConnection();
@@ -293,7 +255,7 @@ public class Client {
             while ((line = reader.readLine()) != null) {
                 task.fuzzingResult += line;
             }
-
+            System.out.println(task.fuzzingResult);
 
         } catch (Exception e) {
             task.status = -3;
