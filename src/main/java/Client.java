@@ -1,7 +1,10 @@
 import org.apache.commons.io.FileUtils;
 import org.apache.maven.shared.verifier.Verifier;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.net.MalformedURLException;
+import java.net.ProtocolException;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.regex.*;
@@ -14,14 +17,14 @@ import java.util.concurrent.TimeUnit;
 
 public class Client {
     private static final long POLL_INTERVAL_SECONDS = 5L;
-    String accessKey = "dynamicCheckJava";
-    String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-
     String jazzerPath;
     String jazzerJarPath;
 
     protected final int TASK_START = 1;
     protected final int TASK_FAIL = 0;
+    String accessKey = "dynamicCheck";
+    String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
+    String url = System.getenv("API_SERVICE_URL");
 
     public Client() {
         if (System.getProperty("os.name").toLowerCase().contains("linux")) {
@@ -41,9 +44,6 @@ public class Client {
     private void setTestResult(Result result, Task task) {
         HttpURLConnection connection = null;
         try {
-            String accessKey = "dynamicCheck";
-            String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-            String url = "https://hust-csdf.liuxx.com/sapi/api/checkTask/retunDynamicCheckResult";
 //            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":\"" + task.taskid + "\",\"toolName\":\"" + "Jazzer" + "\"," + "\"result\":[{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}]}";
             JSONObject requestJson = new JSONObject();
             requestJson.put("AccessKey", accessKey);
@@ -95,12 +95,9 @@ public class Client {
 
         Runnable checkForNewTask = () -> {
             try {
-                String accessKey = "dynamicCheck";
-                String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-                String SERVER_URL = "https://hust-csdf.liuxx.com/sapi/api/checkTask/getDynamicCheckTask_Java";
                 String requestBody = "{\"AccessKey\":\"" + accessKey + "\", \"SecretKey\": \"" + secretKey + "\"}";
 
-                URL apiUrl = new URL(SERVER_URL);
+                URL apiUrl = new URL(url);
                 HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
                 connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "application/json");
@@ -127,7 +124,12 @@ public class Client {
                         System.out.println("New task detected: " + taskJson);
                         Task task = new Task(taskJson);
                         taskExecutor.submit(() -> {
-                            handleNewTask(task);
+                            while (!Thread.currentThread().isInterrupted()) {
+                                if (getDynamicCheckStop(task) == 1) {
+                                    break;
+                                }
+                                handleNewTask(task);
+                            }
                         });
                     } else {
                         System.out.println("没有新的检测任务");
@@ -152,9 +154,6 @@ public class Client {
     private void setTaskStatus(Task task, int status) {
         HttpURLConnection connection = null;
         try {
-            String accessKey = "dynamicCheck";
-            String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-            String url = "https://hust-csdf.liuxx.com/sapi/api/checkTask/setDynamicCheckStatus";
             JSONObject requestJson = new JSONObject();
             requestJson.put("AccessKey", accessKey);
             requestJson.put("SecretKey", secretKey);
@@ -197,6 +196,52 @@ public class Client {
                 connection.disconnect();
             }
         }
+    }
+
+    private int getDynamicCheckStop(Task task) {
+        HttpURLConnection connection = null;
+        int retValue = 1;
+        try {
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("AccessKey", accessKey);
+            requestJson.put("SecretKey", secretKey);
+            requestJson.put("taskid", task.taskid);
+            String requestBody = requestJson.toString();
+            URL apiUrl = new URL(url);
+            connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "text/json");
+            connection.setDoOutput(true);
+
+            OutputStream outputStream = connection.getOutputStream();
+            outputStream.write(requestBody.getBytes());
+            outputStream.flush();
+
+            int responseCode = connection.getResponseCode();
+            BufferedReader reader;
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            } else {
+                reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
+            }
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            JSONObject taskJson = new JSONObject(response.toString());
+            JSONArray result = taskJson.getJSONArray("result");
+            JSONObject stopJSONObject = (JSONObject) result.get(0);
+            retValue = stopJSONObject.getInt("stop");
+        } catch (IOException e) {
+            System.out.println("Error occurred while requesting tasks: " + e.getMessage());
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+        return retValue;
     }
 
 
