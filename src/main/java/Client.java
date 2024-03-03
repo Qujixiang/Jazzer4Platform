@@ -24,6 +24,7 @@ public class Client {
     protected final int TASK_FAIL = 0;
     String accessKey = "dynamicCheck";
     String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
+//    String url = "http://222.20.126.147/sapi/api/checkTask/retunDynamicCheckResult";
     String url = System.getenv("API_SERVICE_URL");
 
     public Client() {
@@ -124,12 +125,12 @@ public class Client {
                         System.out.println("New task detected: " + taskJson);
                         Task task = new Task(taskJson);
                         taskExecutor.submit(() -> {
-                            while (!Thread.currentThread().isInterrupted()) {
-                                if (getDynamicCheckStop(task) == 1) {
-                                    break;
-                                }
+//                            while (!Thread.currentThread().isInterrupted()) {
+//                                if (getDynamicCheckStop(task) == 1) {
+//                                    break;
+//                                }
                                 handleNewTask(task);
-                            }
+//                            }
                         });
                     } else {
                         System.out.println("没有新的检测任务");
