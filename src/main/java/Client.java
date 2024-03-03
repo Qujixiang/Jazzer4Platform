@@ -25,7 +25,8 @@ public class Client {
     String accessKey = "dynamicCheck";
     String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
     //    String url = "http://222.20.126.147/sapi/api/checkTask/retunDynamicCheckResult";
-    String url = System.getenv("API_SERVICE_URL");
+    String url = "http://222.20.126.147:10000/sapi";
+//    String url = System.getenv("API_SERVICE_URL");
 
     public Client() {
         if (System.getProperty("os.name").toLowerCase().contains("linux")) {
