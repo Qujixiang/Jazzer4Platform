@@ -340,7 +340,7 @@ public class Client {
             while (process.isAlive()) {
                 Thread.sleep(100);
             }
-            System.out.println("构建成功！");
+            System.out.println("编译成功！");
             File file = new File(task.targetProgramPath + "target/");
             File[] files = file.listFiles();
             if (files != null) {
@@ -352,11 +352,11 @@ public class Client {
                         break;
                     }
                 }
-                System.out.println("编译成功");
             }
         } catch (Exception e) {
+            System.out.println("编译失败");
             task.status = -2;
-            task.errorMsg = "maven build failed";
+            task.errorMsg = e.toString();
         }
     }
 }
