@@ -1,7 +1,11 @@
 import org.apache.commons.io.FileUtils;
+import org.apache.maven.shared.verifier.Verifier;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.regex.*;
 import java.io.*;
@@ -88,7 +92,7 @@ public class Client {
     /**
      * 接口鉴权
      *
-     * @param apiURL 接口地址
+     * @param apiURL    接口地址
      * @param accessKey 访问秘钥
      * @param secretKey 访问秘钥
      * @return token，失败返回null
@@ -143,7 +147,7 @@ public class Client {
      * 获取检测任务
      *
      * @param apiURL 接口地址
-     * @param token token
+     * @param token  token
      * @return 任务， 失败返回null
      */
     public Task getCheckTask(String apiURL, String token) {
@@ -228,7 +232,7 @@ public class Client {
     /**
      * 设置任务状态
      *
-     * @param task 任务
+     * @param task   任务
      * @param status 状态，1-开始检测，0-检测失败
      */
     private void setTaskStatus(Task task, int status) {
@@ -420,13 +424,13 @@ public class Client {
 
     private void checkMaven(Task task) {
         File taskFile = new File(task.targetProgramPath);
-        String cmd = "mvn clean package";
+        Map<String, String> env = new HashMap<>();
+        env.put("maven.multiModuleProjectDirectory", taskFile.getAbsolutePath());
+
         try {
-            Process process = Runtime.getRuntime().exec(cmd, null, taskFile);
-            while (process.isAlive()) {
-                Thread.sleep(100);
-            }
-            System.out.println("编译成功！");
+            Verifier v = new Verifier(taskFile.getAbsolutePath());
+            v.executeGoals(Arrays.asList("clean", "package"), env);
+            System.out.println("构建成功");
             File file = new File(task.targetProgramPath + "target/");
             File[] files = file.listFiles();
             if (files != null) {
@@ -440,7 +444,7 @@ public class Client {
                 }
             }
         } catch (Exception e) {
-            System.out.println("编译失败");
+            System.out.println("编译失败:" + e);
             task.status = -2;
             task.errorMsg = e.toString();
         }
