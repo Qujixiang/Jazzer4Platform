@@ -1,11 +1,7 @@
 import org.apache.commons.io.FileUtils;
-import org.apache.maven.shared.verifier.Verifier;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.net.MalformedURLException;
-import java.net.ProtocolException;
-import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.regex.*;
 import java.io.*;
@@ -24,8 +20,8 @@ public class Client {
     protected final int TASK_FAIL = 0;
     String accessKey = "dynamicCheck";
     String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-    // String url = "http://222.20.126.147:10000/sapi";
     String url = System.getenv("API_SERVICE_URL");
+    String token = null;
 
     public Client() {
         if (System.getProperty("os.name").toLowerCase().contains("linux")) {
@@ -45,16 +41,15 @@ public class Client {
     private void setTestResult(Result result, Task task) {
         HttpURLConnection connection = null;
         try {
-//            String requestBody = "{\"token\":\"" + token + "\",\"taskid\":\"" + task.taskid + "\",\"toolName\":\"" + "Jazzer" + "\"," + "\"result\":[{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}]}";
             JSONObject requestJson = new JSONObject();
-            requestJson.put("AccessKey", accessKey);
-            requestJson.put("SecretKey", secretKey);
+            requestJson.put("token", token);
             requestJson.put("taskid", task.taskid);
             requestJson.put("toolName", "Jazzer");
             requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
             String requestBody = requestJson.toString();
 
-            URL apiUrl = new URL(url);
+            // 返回检测结果
+            URL apiUrl = new URL(url + "/api/checkTask/retunDynamicCheckResult");
             connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
@@ -90,54 +85,137 @@ public class Client {
         }
     }
 
+    /**
+     * 接口鉴权
+     *
+     * @param apiURL 接口地址
+     * @param accessKey 访问秘钥
+     * @param secretKey 访问秘钥
+     * @return token，失败返回null
+     */
+    public String authenticate(String apiURL, String accessKey, String secretKey) {
+        HttpURLConnection connection = null;
+        try {
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("AccessKey", accessKey);
+            requestJson.put("SecretKey", secretKey);
+            String requestBody = requestJson.toString();
+
+            URL apiUrl = new URL(apiURL);
+            connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "text/json");
+            connection.setDoOutput(true);
+
+            OutputStream outputStream = connection.getOutputStream();
+            outputStream.write(requestBody.getBytes());
+            outputStream.flush();
+
+            int responseCode = connection.getResponseCode();
+            BufferedReader reader;
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            } else {
+                reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
+            }
+
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+            JSONObject json = new JSONObject(response.toString());
+            JSONObject result = json.getJSONObject("result");
+            return result.getString("token");
+        } catch (IOException e) {
+            System.err.println("Error occurred while requesting tasks: " + e.getMessage());
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取检测任务
+     *
+     * @param apiURL 接口地址
+     * @param token token
+     * @return 任务， 失败返回null
+     */
+    public Task getCheckTask(String apiURL, String token) {
+        HttpURLConnection connection = null;
+        try {
+            JSONObject requestJson = new JSONObject();
+            requestJson.put("token", token);
+            String requestBody = requestJson.toString();
+
+            URL apiUrl = new URL(apiURL);
+            connection = (HttpURLConnection) apiUrl.openConnection();
+            connection.setRequestMethod("POST");
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "text/json");
+            connection.setDoOutput(true);
+
+            OutputStream outputStream = connection.getOutputStream();
+            outputStream.write(requestBody.getBytes());
+            outputStream.flush();
+
+            int responseCode = connection.getResponseCode();
+            BufferedReader reader;
+            if (responseCode == HttpURLConnection.HTTP_OK) {
+                reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            } else {
+                reader = new BufferedReader(new InputStreamReader(connection.getErrorStream()));
+            }
+
+            StringBuilder response = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                response.append(line);
+            }
+            reader.close();
+            JSONObject taskJson = new JSONObject(response.toString());
+            String msg = taskJson.getString("message");
+            if (msg.equals("OK")) {
+                return new Task(taskJson);
+            }
+        } catch (IOException e) {
+            System.err.println("Error occurred while requesting tasks: " + e.getMessage());
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+        return null;
+    }
+
     private void run() {
         ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(100);
         final ExecutorService taskExecutor = Executors.newCachedThreadPool();
 
         Runnable checkForNewTask = () -> {
             try {
-                String requestBody = "{\"AccessKey\":\"" + accessKey + "\", \"SecretKey\": \"" + secretKey + "\"}";
-
-                URL apiUrl = new URL(url);
-                HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
-                connection.setRequestMethod("POST");
-                connection.setRequestProperty("Content-Type", "application/json");
-                connection.setRequestProperty("Accept", "text/json");
-                connection.setDoOutput(true);
-
-                OutputStream outputStream = connection.getOutputStream();
-                outputStream.write(requestBody.getBytes());
-                outputStream.flush();
-
-                int responseCode = connection.getResponseCode();
-
-                if (responseCode == HttpURLConnection.HTTP_OK) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    reader.close();
-                    JSONObject taskJson = new JSONObject(response.toString());
-                    String msg = taskJson.getString("message");
-                    if (msg.equals("OK")) {
-                        System.out.println("New task detected: " + taskJson);
-                        Task task = new Task(taskJson);
-                        taskExecutor.submit(() -> {
-//                            while (!Thread.currentThread().isInterrupted()) {
-//                                if (getDynamicCheckStop(task) == 1) {
-//                                    break;
-//                                }
-                            handleNewTask(task);
-//                            }
-                        });
-                    } else {
-                        System.out.println("没有新的检测任务");
-                    }
-                } else {
-                    System.out.println("没有新的检测任务");
+                // 鉴权
+                token = authenticate(url + "/api/checkTask/authenticate", accessKey, secretKey);
+                if (token == null) {
+                    throw new RuntimeException("接口鉴权失败");
                 }
+
+                // 获取任务
+                Task task = getCheckTask(url + "/api/checkTask/getDynamicCheckTask_Java", token);
+                if (task == null) {
+                    System.out.println("没有新的检测任务");
+                    return;
+                }
+
+                // 处理任务
+                taskExecutor.submit(() -> {
+                    handleNewTask(task);
+                });
             } catch (Exception e) {
                 System.err.println("Error while checking for new task: " + e.getMessage());
             }
@@ -147,23 +225,23 @@ public class Client {
         scheduler.scheduleAtFixedRate(checkForNewTask, 0, POLL_INTERVAL_SECONDS, TimeUnit.SECONDS);
     }
 
-    /*
-     * 处理新任务
-     * 执行检测时，通过此接口（status=1）通知平台已开始执行任务检测；
-     * 检测异常时，通过此接口（status=0）通知平台检测任务执行失败；
+    /**
+     * 设置任务状态
+     *
+     * @param task 任务
+     * @param status 状态，1-开始检测，0-检测失败
      */
     private void setTaskStatus(Task task, int status) {
         HttpURLConnection connection = null;
         try {
             JSONObject requestJson = new JSONObject();
-            requestJson.put("AccessKey", accessKey);
-            requestJson.put("SecretKey", secretKey);
+            requestJson.put("token", token);
             requestJson.put("taskid", task.taskid);
             requestJson.put("status", status);
             requestJson.put("msg", task.errorMsg);
             String requestBody = requestJson.toString();
 
-            URL apiUrl = new URL(url);
+            URL apiUrl = new URL(url + "/api/checkTask/setDynamicCheckStatus");
             connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
@@ -199,16 +277,22 @@ public class Client {
         }
     }
 
+    /**
+     * 获取动态检测是否停止
+     *
+     * @param task 任务
+     * @return 1-停止
+     */
     private int getDynamicCheckStop(Task task) {
         HttpURLConnection connection = null;
         int retValue = 1;
         try {
             JSONObject requestJson = new JSONObject();
-            requestJson.put("AccessKey", accessKey);
-            requestJson.put("SecretKey", secretKey);
+            requestJson.put("token", token);
             requestJson.put("taskid", task.taskid);
             String requestBody = requestJson.toString();
-            URL apiUrl = new URL(url);
+
+            URL apiUrl = new URL(url + "/api/checkTask/getDynamicCheckStop");
             connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
@@ -232,9 +316,8 @@ public class Client {
                 response.append(line);
             }
             JSONObject taskJson = new JSONObject(response.toString());
-            JSONArray result = taskJson.getJSONArray("result");
-            JSONObject stopJSONObject = (JSONObject) result.get(0);
-            retValue = stopJSONObject.getInt("stop");
+            JSONObject result = taskJson.getJSONObject("result");
+            retValue = result.getInt("stop");
         } catch (IOException e) {
             System.out.println("Error occurred while requesting tasks: " + e.getMessage());
         } finally {
@@ -245,31 +328,32 @@ public class Client {
         return retValue;
     }
 
-
     private void handleNewTask(Task task) {
         setTaskStatus(task, TASK_START);
         downloadProgram(task);
         if (task.status < 0) {
             setTaskStatus(task, TASK_FAIL);
+            cleanUp(task);
             return;
         }
         checkMaven(task);
         if (task.status < 0) {
             setTaskStatus(task, TASK_FAIL);
+            cleanUp(task);
             return;
         }
         doFuzzing(task);
         if (task.status < 0) {
             setTaskStatus(task, TASK_FAIL);
+            cleanUp(task);
             return;
         }
         Result result = new Result(task);
         if (task.status < 0) {
             setTaskStatus(task, TASK_FAIL);
-            return;
+            cleanUp(task);
         }
         setTestResult(result, task);
-        cleanUp(task);
     }
 
     private void cleanUp(Task task) {
@@ -280,7 +364,6 @@ public class Client {
         }
     }
 
-
     private void doFuzzing(Task task) {
         try {
             FileUtils.copyFile(new File(jazzerPath), new File(task.targetJarPath + "/jazzer"));
@@ -289,11 +372,14 @@ public class Client {
             long startTime = System.currentTimeMillis();
             Process process = Runtime.getRuntime().exec("./jazzer --cp=" + task.projectName + ".jar --autofuzz=" + task.targetMethod, null, new File(task.targetJarPath));
             while (process.isAlive()) {
-                Thread.sleep(10);
+                Thread.sleep(1000);
+                if (getDynamicCheckStop(task) == 1) {
+                    process.destroy();
+                    break;
+                }
             }
             long endTime = System.currentTimeMillis();
             task.fuzzingTime = (endTime - startTime) / 1000;
-
 
             InputStream inputStream = process.getErrorStream();
             BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream));
