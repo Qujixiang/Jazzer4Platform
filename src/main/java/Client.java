@@ -24,9 +24,8 @@ public class Client {
     protected final int TASK_FAIL = 0;
     String accessKey = "dynamicCheck";
     String secretKey = "c06080599b7fe3a9bd97a4cc7955099d";
-    //    String url = "http://222.20.126.147/sapi/api/checkTask/retunDynamicCheckResult";
-    String url = "http://222.20.126.147:10000/sapi";
-//    String url = System.getenv("API_SERVICE_URL");
+    // String url = "http://222.20.126.147:10000/sapi";
+    String url = System.getenv("API_SERVICE_URL");
 
     public Client() {
         if (System.getProperty("os.name").toLowerCase().contains("linux")) {
@@ -54,8 +53,8 @@ public class Client {
             requestJson.put("toolName", "Jazzer");
             requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
             String requestBody = requestJson.toString();
-            String setResultUrl = url + "/api/checkTask/retunDynamicCheckResult";
-            URL apiUrl = new URL(setResultUrl);
+
+            URL apiUrl = new URL(url);
             connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
@@ -98,8 +97,8 @@ public class Client {
         Runnable checkForNewTask = () -> {
             try {
                 String requestBody = "{\"AccessKey\":\"" + accessKey + "\", \"SecretKey\": \"" + secretKey + "\"}";
-                String getTaskUrl = url + "/api/checkTask/getDynamicCheckTask_Java";
-                URL apiUrl = new URL(getTaskUrl);
+
+                URL apiUrl = new URL(url);
                 HttpURLConnection connection = (HttpURLConnection) apiUrl.openConnection();
                 connection.setRequestMethod("POST");
                 connection.setRequestProperty("Content-Type", "application/json");
@@ -163,8 +162,8 @@ public class Client {
             requestJson.put("status", status);
             requestJson.put("msg", task.errorMsg);
             String requestBody = requestJson.toString();
-            String setTaskStatusUrl = url + "/api/checkTask/setDynamicCheckStatus";
-            URL apiUrl = new URL(setTaskStatusUrl);
+
+            URL apiUrl = new URL(url);
             connection = (HttpURLConnection) apiUrl.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/json");
