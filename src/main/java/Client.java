@@ -424,13 +424,14 @@ public class Client {
 
     private void checkMaven(Task task) {
         File taskFile = new File(task.targetProgramPath);
-        Map<String, String> env = new HashMap<>();
-        env.put("maven.multiModuleProjectDirectory", taskFile.getAbsolutePath());
-
+        String cmd = "mvn clean package";
         try {
-            Verifier v = new Verifier(taskFile.getAbsolutePath());
-            v.executeGoals(Arrays.asList("clean", "package"), env);
-            System.out.println("构建成功");
+            System.out.println("开始编译: " + task.targetProgramPath);
+            Process process = Runtime.getRuntime().exec(cmd, null, taskFile);
+            while (process.isAlive()) {
+                Thread.sleep(100);
+            }
+            System.out.println("编译成功！");
             File file = new File(task.targetProgramPath + "target/");
             File[] files = file.listFiles();
             if (files != null) {
