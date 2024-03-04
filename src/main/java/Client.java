@@ -1,11 +1,7 @@
 import org.apache.commons.io.FileUtils;
-import org.apache.maven.shared.verifier.Verifier;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.regex.*;
 import java.io.*;
@@ -81,7 +77,7 @@ public class Client {
             JSONObject json = new JSONObject(response.toString());
             System.out.println(json);
         } catch (IOException e) {
-            System.out.println("Error occurred while requesting tasks: " + e.getMessage());
+            handleException(e, "setTestResult failed");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -92,7 +88,7 @@ public class Client {
     /**
      * 接口鉴权
      *
-     * @param apiURL    接口地址
+     * @param apiURL 接口地址
      * @param accessKey 访问秘钥
      * @param secretKey 访问秘钥
      * @return token，失败返回null
@@ -134,7 +130,7 @@ public class Client {
             JSONObject result = json.getJSONObject("result");
             return result.getString("token");
         } catch (IOException e) {
-            System.err.println("Error occurred while requesting tasks: " + e.getMessage());
+            handleException(e, "authenticate failed");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -147,7 +143,7 @@ public class Client {
      * 获取检测任务
      *
      * @param apiURL 接口地址
-     * @param token  token
+     * @param token token
      * @return 任务， 失败返回null
      */
     public Task getCheckTask(String apiURL, String token) {
@@ -188,7 +184,7 @@ public class Client {
                 return new Task(taskJson);
             }
         } catch (IOException e) {
-            System.err.println("Error occurred while requesting tasks: " + e.getMessage());
+            handleException(e, "getCheckTask failed");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -202,27 +198,23 @@ public class Client {
         final ExecutorService taskExecutor = Executors.newCachedThreadPool();
 
         Runnable checkForNewTask = () -> {
-            try {
-                // 鉴权
-                token = authenticate(url + "/api/checkTask/authenticate", accessKey, secretKey);
-                if (token == null) {
-                    throw new RuntimeException("接口鉴权失败");
-                }
-
-                // 获取任务
-                Task task = getCheckTask(url + "/api/checkTask/getDynamicCheckTask_Java", token);
-                if (task == null) {
-                    System.out.println("没有新的检测任务");
-                    return;
-                }
-
-                // 处理任务
-                taskExecutor.submit(() -> {
-                    handleNewTask(task);
-                });
-            } catch (Exception e) {
-                System.err.println("Error while checking for new task: " + e.getMessage());
+            // 鉴权
+            token = authenticate(url + "/api/checkTask/authenticate", accessKey, secretKey);
+            if (token == null) {
+                throw new RuntimeException("接口鉴权失败");
             }
+
+            // 获取任务
+            Task task = getCheckTask(url + "/api/checkTask/getDynamicCheckTask_Java", token);
+            if (task == null) {
+                System.out.println("没有新的检测任务");
+                return;
+            }
+
+            // 处理任务
+            taskExecutor.submit(() -> {
+                handleNewTask(task);
+            });
         };
 
         // 每隔 POLL_INTERVAL_SECONDS 秒执行一次检查
@@ -232,7 +224,7 @@ public class Client {
     /**
      * 设置任务状态
      *
-     * @param task   任务
+     * @param task 任务
      * @param status 状态，1-开始检测，0-检测失败
      */
     private void setTaskStatus(Task task, int status) {
@@ -273,7 +265,7 @@ public class Client {
             System.out.println("response: " + response);
 
         } catch (IOException e) {
-            System.out.println("Error occurred while requesting tasks: " + e.getMessage());
+            handleException(e, "setTaskStatus failed");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -323,7 +315,7 @@ public class Client {
             JSONObject result = taskJson.getJSONObject("result");
             retValue = result.getInt("stop");
         } catch (IOException e) {
-            System.out.println("Error occurred while requesting tasks: " + e.getMessage());
+            handleException(e, "getDynamicCheckStop failed");
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -364,7 +356,7 @@ public class Client {
         try {
             FileUtils.deleteDirectory(new File(task.targetProgramPath));
         } catch (Exception e) {
-            System.out.println("删除文件失败");
+            handleException(e, "clean up failed");
         }
     }
 
@@ -394,6 +386,7 @@ public class Client {
             System.out.println(task.fuzzingResult);
 
         } catch (Exception e) {
+            handleException(e, "fuzzing failed");
             task.status = -3;
             task.errorMsg = e.toString();
         }
@@ -417,6 +410,7 @@ public class Client {
                 System.out.println("git clone success");
             }
         } catch (Exception e) {
+            handleException(e, "git clone failed");
             task.status = -1;
             task.errorMsg = e.toString();
         }
@@ -445,10 +439,18 @@ public class Client {
                 }
             }
         } catch (Exception e) {
-            System.out.println("编译失败:" + e);
+            handleException(e, "编译失败: " + task.targetProgramPath);
             task.status = -2;
             task.errorMsg = e.toString();
         }
+    }
+
+    private void handleException(Exception e, String message) {
+        System.err.println("----------------- Exception -----------------");
+        System.err.println(message);
+        System.err.println(e.getMessage());
+        e.printStackTrace();
+        System.err.println("----------------------------------------------");
     }
 }
 
