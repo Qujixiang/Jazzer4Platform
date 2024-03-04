@@ -386,7 +386,7 @@ public class Client {
             System.out.println(task.fuzzingResult);
 
         } catch (Exception e) {
-            handleException(e, "fuzzing failed");
+//            handleException(e, "fuzzing failed");
             task.status = -3;
             task.errorMsg = e.toString();
         }
