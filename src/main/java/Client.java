@@ -45,7 +45,7 @@ public class Client {
             requestJson.put("token", token);
             requestJson.put("taskid", task.taskid);
             requestJson.put("toolName", "Jazzer");
-            requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + result.pocFileName + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
+            requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
             String requestBody = requestJson.toString();
 
             // 返回检测结果
@@ -487,8 +487,16 @@ class Result {
             this.fileName = matcher.group(3) + ".java";
             this.pocFileName = matcher.group(5).replace("./", "");
             this.line = Integer.parseInt(matcher.group(4));
-            this.poc = "./target/";
+//            this.poc = "./target/";
+            String pocFilePath = task.targetProgramPath + "target/" + pocFileName;
             try {
+                // 读取该文件，并将其保存到this.poc中
+                BufferedReader reader = new BufferedReader(new FileReader(pocFilePath));
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    this.poc += line + "\n";
+                }
+                reader.close();
                 executeCommand("git checkout -b task_" + task.taskid, task.targetJarPath);
                 executeCommand("git add .", task.targetJarPath);
                 executeCommand("git commit -m \"task_" + task.taskid + "\"", task.targetJarPath);
