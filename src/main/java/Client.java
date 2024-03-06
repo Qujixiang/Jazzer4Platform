@@ -47,6 +47,7 @@ public class Client {
             requestJson.put("toolName", "Jazzer");
             requestJson.put("result", new JSONObject[]{new JSONObject("{\"img_base64\": \"\", \"filename\":\"" + result.fileName + "\",\"line\":" + result.line + ",\"category\":\"" + result.category + "\",\"funName\":\"" + task.targetMethod + "\",\"poc\":\"" + result.poc + "\",\"pocFileName\":\"" + result.pocFileName + "\",\"executetime\":" + task.fuzzingTime + "}")});
             String requestBody = requestJson.toString();
+            System.out.println("requestBody: " + requestBody);
 
             // 返回检测结果
             URL apiUrl = new URL(url + "/api/checkTask/retunDynamicCheckResult");
@@ -76,7 +77,7 @@ public class Client {
             reader.close();
             JSONObject json = new JSONObject(response.toString());
             System.out.println(json);
-        } catch (IOException e) {
+        } catch (Exception e) {
             handleException(e, "setTestResult failed");
         } finally {
             if (connection != null) {
@@ -494,9 +495,10 @@ class Result {
                 BufferedReader reader = new BufferedReader(new FileReader(pocFilePath));
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    this.poc += line + "\n";
+                    this.poc += line + "\\n";
                 }
                 reader.close();
+                System.out.println("poc: " + this.poc);
                 executeCommand("git checkout -b task_" + task.taskid, task.targetJarPath);
                 executeCommand("git add .", task.targetJarPath);
                 executeCommand("git commit -m \"task_" + task.taskid + "\"", task.targetJarPath);
