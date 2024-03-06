@@ -499,10 +499,10 @@ class Result {
                 }
                 reader.close();
                 System.out.println("poc: " + this.poc);
-                executeCommand("git checkout -b task_" + task.taskid, task.targetJarPath);
-                executeCommand("git add .", task.targetJarPath);
-                executeCommand("git commit -m \"task_" + task.taskid + "\"", task.targetJarPath);
-                executeCommand("git push origin task_" + task.taskid, task.targetJarPath);
+//                executeCommand("git checkout -b task_" + task.taskid, task.targetJarPath);
+//                executeCommand("git add .", task.targetJarPath);
+//                executeCommand("git commit -m \"task_" + task.taskid + "\"", task.targetJarPath);
+//                executeCommand("git push origin task_" + task.taskid, task.targetJarPath);
             } catch (Exception e) {
                 e.printStackTrace();
             }
